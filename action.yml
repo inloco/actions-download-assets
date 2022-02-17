@@ -1,0 +1,79 @@
+name: 'Download Assets'
+description: 'Downloads assets produced in other jobs'
+author: 'Incognia'
+inputs:
+  name:
+    description: 'The name to identify the assets group'
+    required: true
+runs:
+  using: composite
+  steps:
+  - name: Generate OIDC session name
+    id: session-name
+    shell: bash
+    run: echo "::set-output name=session-name::${GITHUB_REPOSITORY//\//@}"
+
+  - name: Get AWS credentials
+    uses: inloco/actions-configure-aws-credentials@feature/initial-implementation
+    id: aws-credentials
+    with:
+      aws-region: ${{ env.AWS_REGION }}
+      role-to-assume: arn:aws:iam::779099367007:role/github-actions-storage
+      role-session-name: ${{ steps.session-name.outputs.session-name }}
+
+  - name: Generate asset base key
+    id: assets-base-path
+    shell: bash
+    env:
+      ASSUMED_ROLE_ID: ${{ steps.aws-credentials.outputs.aws-role-id }}
+    run: echo "::set-output name=assets-base-path::assets/${ASSUMED_ROLE_ID}/run:${GITHUB_RUN_ID}/attempt:${GITHUB_RUN_ATTEMPT}"
+
+  - name: Download assets
+    uses: actions/github-script@v5
+    env:
+      AWS_ACCESS_KEY_ID: ${{ steps.aws-credentials.outputs.aws-access-key-id }}
+      AWS_SECRET_ACCESS_KEY: ${{ steps.aws-credentials.outputs.aws-secret-access-key }}
+      AWS_SESSION_TOKEN: ${{ steps.aws-credentials.outputs.aws-session-token }}
+      ASSETS_NAME: ${{ inputs.name }}
+      ASSETS_BASE_PATH: ${{ steps.assets-base-path.outputs.assets-base-path }}
+    with:
+      script: |
+        const proc = require('child_process')
+
+        const env = process.env
+        const BUCKET = 'incognia-github-actions-storage'
+
+        function objectPath(key) {
+          return `${env.ASSETS_BASE_PATH}/${key}`
+        }
+
+        function s3ObjectUrl(key) {
+          return `s3://${BUCKET}/${objectPath(key)}`
+        }
+
+        function exec(command) {
+          proc.execSync(command, { shell: '/bin/bash', stdio: 'inherit' })
+        }
+
+        function execv(command) {
+          return proc.execSync(command, { shell: '/bin/bash', stdio: ['inherit', 'pipe', 'inherit'] })
+            .toString()
+            .trim()
+        }
+
+        async function s3ObjectExists(key) {
+          const object = objectPath(key)
+          const ret = execv(`
+            aws s3api list-objects-v2 --bucket "${BUCKET}" --prefix "${object}" \
+              | jq '.Contents[0] | .Key == "${object}"'
+          `)
+          return ret === 'true'
+        }
+
+        if (!await s3ObjectExists(env.ASSETS_NAME)) {
+          core.setFailed('Assets not found!')
+          return
+        }
+
+        core.info('Downloading assets...')
+        exec(`aws s3 cp "${s3ObjectUrl(env.ASSETS_NAME)}" - | tar -xvPf - -C /`)

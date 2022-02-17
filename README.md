@@ -1,2 +1,2 @@
-inloco/actions-upload-assets
+inloco/actions-download-assets
 ===
