@@ -25,28 +25,5 @@ runs:
       ASSETS_BASE_PATH: assets/${{ steps.aws-credentials.outputs.subject }}/run:${{ env.GITHUB_RUN_ID }}/attempt:${{ env.GITHUB_RUN_ATTEMPT }}
       BUCKET: incognia-github-actions-storage
     run: |
-      function objectPath {
-        printf "%s" "${ASSETS_BASE_PATH}/$1"
-      }
-
-      function s3ObjectUrl {
-        printf "%s" "s3://${BUCKET}/$(objectPath $1)"
-      }
-
-      function s3ObjectExists {
-        local object=$(objectPath $1)
-        aws s3api list-objects-v2 --bucket "${BUCKET}" --prefix "${object}" \
-          | jq --exit-status ".Contents[0] | .Key == \"${object}\"" >/dev/null
-      }
-
-      echo "Checking if assets exist..."
-
-      if ! s3ObjectExists ${ASSETS_NAME}
-      then
-        echo "Assets not found!"
-        echo "::error ::Assets not found!"
-        exit 1
-      fi
-
       echo "Downloading assets..."
-      aws s3 cp "$(s3ObjectUrl ${ASSETS_NAME})" - | tar -xvf -
+      aws s3 cp "s3://${BUCKET}/${ASSETS_BASE_PATH}/${ASSETS_NAME}" - | tar -xvf -
