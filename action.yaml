@@ -1,0 +1,26 @@
+name: Download Assets
+description: Downloads assets produced in other jobs
+author: Incognia
+inputs:
+  name:
+    description: The name to identify the assets group
+    required: true
+runs:
+  using: composite
+  steps:
+    - name: Get AWS credentials
+      uses: inloco/actions-configure-aws-credentials@HEAD
+      id: aws-credentials
+      with:
+        aws-region: ${{ env.AWS_REGION }}
+        role-to-assume: arn:aws:iam::779099367007:role/github-actions-storage
+    - name: Download assets
+      shell: bash
+      env:
+        AWS_ACCESS_KEY_ID: ${{ steps.aws-credentials.outputs.aws-access-key-id }}
+        AWS_SECRET_ACCESS_KEY: ${{ steps.aws-credentials.outputs.aws-secret-access-key }}
+        AWS_SESSION_TOKEN: ${{ steps.aws-credentials.outputs.aws-session-token }}
+        ASSETS_NAME: ${{ inputs.name }}
+        ASSETS_BASE_PATH: assets/${{ steps.aws-credentials.outputs.subject }}/run:${{ env.GITHUB_RUN_ID }}/attempt:${{ env.GITHUB_RUN_ATTEMPT }}
+        BUCKET: incognia-github-actions-storage
+      run: aws s3 cp "s3://${BUCKET}/${ASSETS_BASE_PATH}/${ASSETS_NAME}" - | tar -xvf -
