@@ -9,7 +9,7 @@ runs:
   using: composite
   steps:
     - name: Get AWS credentials
-      uses: inloco/actions-configure-aws-credentials@HEAD
+      uses: inloco/actions-configure-aws-credentials@feat/until
       id: aws-credentials
       with:
         aws-region: ${{ env.AWS_REGION }}
